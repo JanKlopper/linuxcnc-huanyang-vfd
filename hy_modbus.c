@@ -397,8 +397,8 @@ int receive_msg(modbus_param_t *mb_param, int msg_length_computed,
 		if ((*msg_length) < msg_length_computed) {
 			/* We can receive a shorter message than msg_length_computed as
 		  		some functions return one byte in the data feild. Check against
-				the received data length stored in p_msg[2] */
-			if (*msg_length == p_msg[2]+5) {
+				the received data length stored in msg[2] */
+      if ((*msg_length >= 2) && (*msg_length == msg[2]+5)) {
 				/* we have received the whole message */
 				length_to_read = 0;
 			} else {			
@@ -406,8 +406,8 @@ int receive_msg(modbus_param_t *mb_param, int msg_length_computed,
 				length_to_read = msg_length_computed - (*msg_length);
 		 	
 		 		if (mb_param->debug) {
-				printf("message was incomplete, length still to read = [%.2X]", length_to_read);
-				printf("\n");
+  				printf("message was incomplete, length still to read = [%.2X]", length_to_read);
+	  			printf("\n");
 				}
 			}
 		} else {
@@ -415,7 +415,7 @@ int receive_msg(modbus_param_t *mb_param, int msg_length_computed,
 		}
 		
 		/* Moves the pointer to receive other data */
-        p_msg = &(p_msg[read_ret]);
+    p_msg = &(p_msg[read_ret]);
 
 		if (length_to_read > 0) {
 			/* If no character at the buffer wait
