@@ -1,2 +1,6 @@
+#!/bin/bash
 
-make && sudo make install 
+cp huanyangvfd.py ~/bin/
+cp huanyang485.py ~/bin/
+
+echo "Check out the config examples for the HAL setup"
