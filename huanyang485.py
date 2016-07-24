@@ -32,6 +32,31 @@ h.send(function=5, data=0x600, parameter=0x00) # set frequency in hz*100
 h.send(function=3, data=0x08) # stop spindle
 '''
 
+# bits in Status Data
+STATUS_SetF = 0x00 # Set frequency command
+STATUS_OutF = 0x01 # Actual output frequency
+STATUS_OutA = 0x02 # Actual output Amps
+STATUS_RoTT = 0x03 # Actual spindle speed in rpm
+STATUS_DCV = 0x04 # DC Volts (to be confirmed)
+STATUS_ACV = 0x05 # AC Volts (to be confirmed)
+STATUS_Cont = 0x06
+STATUS_Tmp = 0x07 # Temperature (to be confirmed)
+
+# control commands CNTR
+CONTROL_Run_Fwd = 0x01
+CONTROL_Run_Rev =	0x11
+CONTROL_Stop = 0x08
+
+# control responses CNST
+CONTROL_Run	= 0x01
+CONTROL_Jog	 = 0x02
+CONTROL_Command_rf = 0x04
+CONTROL_Running	= 0x08
+CONTROL_Jogging	= 0x10
+CONTROL_Running_rf = 0x20
+CONTROL_Bracking = 0x40
+CONTROL_Track_Start = 0x80
+
 class Huanyang_rs485(object):
   
   def __init__(self, device='/dev/ttyUSB0', baudrate=9600, address=1, debug=False):
@@ -40,7 +65,8 @@ class Huanyang_rs485(object):
     self.address = 1
     self.serial = serial.Serial(self.device, baudrate=self.baudrate)
     self.debug = debug
-    
+    self.modbus_ok = False
+
   def Send(self, function=1, data=None, parameter=None):
     """Send a message to the VFD, adds crc"""
     if function < 3: #function_read, function_write
@@ -77,23 +103,66 @@ class Huanyang_rs485(object):
 
   def Read(self, length):
     if length:
+      self.modbus_ok = True
       return self.serial.read(length)
+    self.modbus_ok = False
     return False
 
   def StartSpindel(self):
-    return self.Read(self.Send(function=3, data=0x01)) # start
+    return self.Read(self.Send(function=3, data=CONTROL_Run_Fwd)) # start
     
   def StopSpindel(self):
-    return self.Read(self.Send(function=3, data=0x08)) # stop spindle
+    return self.Read(self.Send(function=3, data=CONTROL_Stop)) # stop spindle
+
+  def GetStatus(self, data):
+    rott = self.Read(self.Send(function=4, data=data))
+    return (ord(rott[4]) << 8  | ord(rott[5]))
+
+  def GetFrequency(self):
+    frequency = self.Read(self.Send(function=4, data=STATUS_OutF))
+    return (ord(frequency[4]) << 8  | ord(frequency[5])) / 100
     
   def SetFrequency(self, frequency):
-    return self.Read(self.Send(function=5, data=frequency*100, parameter=0x00))
+    frequency = min(int(self.max_frequency), frequency)
+    frequency = self.Read(self.Send(function=5, data=frequency*100, parameter=0x00))
+    return (ord(frequency[3]) << 8  | ord(frequency[4])) / 100
 
   def Reverse(self):
-    return self.Read(self.send(function=3, data=0x10)) # reverse/forward
+    return self.Read(self.Send(function=3, data=CONTROL_Run_Rev)) # reverse/forward
 
-  def Forward(self):
-    return self.Read(self.send(function=3, data=0x02)) # forward
+  def GetInfo(self, parameter, factor=1):
+    data = self.Read(self.Send(function=1, data=0x0000, parameter=parameter))
+    return (ord(data[4]) << 8  | ord(data[5])) * factor
+
+  def Base_frequency(self):
+    return self.GetInfo(4, 0.01)
+
+  def Max_frequency(self):
+    return self.GetInfo(5, 0.01)
+    
+  def Min_frequency(self):
+    return self.GetInfo(11, 0.01)
+
+  def Rated_motor_voltage(self):
+    return self.GetInfo(141, 0.1)
+
+  def Rated_motor_current(self):
+    return self.GetInfo(142, 0.1)
+
+  def Motor_poles(self):
+    return self.GetInfo(143)
+
+  def Rated_motor_rpm(self):
+    return self.GetInfo(144)
+
+  def ReadSetup(self):
+     self.base_frequency = self.Base_frequency()
+     self.max_frequency = self.Max_frequency()
+     self.min_frequency = self.Min_frequency()     
+     self.rated_motor_voltage = self.Rated_motor_voltage()
+     self.rated_motor_current = self.Rated_motor_current()
+     #self.motor_poles = self.Motor_poles()
+     self.rated_motor_rpm = self.Rated_motor_rpm()
 
 #Table of CRC values for high-order byte 
 table_crc_hi = (
